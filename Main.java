@@ -6,31 +6,28 @@ import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import java.time.Duration;
-import java.util.List;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) {
+
+        //Инициализация драйвера, переход на страницу приложения
         WebDriver driver = new ChromeDriver();
-
         driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
-
-        //Переход на страницу авторизации
-
         driver.get("http://127.0.0.1:9090/");
 
-        WebElement login = driver.findElement(By.name("transLog"));
-        login.sendKeys("user");
+        //Авторизация
+        LoginTransvision authorization = new LoginTransvision(driver);
+        authorization.setLogin("user1");
+        authorization.setPassword("123");
+        //Клик по кнопке "Ок" на странице авторизации, переход на страницу пользователя (создание объекта страницы пользователя)
+        TransvisionUserPage userPage = authorization.okBtnClick();
 
-        WebElement password = driver.findElement(By.name("transPwd"));
-        password.sendKeys("123");
-
-        WebElement okBtn = driver.findElement(By.id("authOk"));
-        okBtn.click();
-
-        //Ожидание информационного окна
-
+        //Ожидание информационного окна, клик на кнопку подтверждения
         WebElement element = (new WebDriverWait(driver, Duration.ofSeconds(10)).until(ExpectedConditions.presenceOfElementLocated(By.className("stwindow"))));
 
         if(driver.findElement(By.className("stwindow")).isDisplayed()){
@@ -38,157 +35,74 @@ public class Main {
         }
 
         //Нажатие на кнопку "Фильтры"
-
-        WebElement filters = driver.findElement(By.className("pan-buttons"));
-        filters.click();
+        Filters filter = userPage.openFilters();
 
         //Ввод фильтра
+        filter.setObject("Минск");
+        filter.setParameter("ДП");
+       filter.setCause("ПУ 5/Д:068 1");
 
-        WebElement objectField = driver.findElement(By.id("object_0"));
-        objectField.sendKeys("ТП24");
+        //Подтверждение фильтра, переход к отфильтрованной странице пользователя (создание нового объектра страницы пользователя)
+        TransvisionUserPage filteredPage = filter.okBtnClick();
 
-        WebElement parameterField = driver.findElement(By.id("parametr_0"));
-        parameterField.sendKeys("ДЗ");
+        //После применения фильтра должна остаться одна строка с осциллограммой.
+        //Проверяем количество строк в таблице
 
-        WebElement causeField = driver.findElement(By.id("cause_0"));
-        causeField.sendKeys("значение выше нормы");
+        List<WebElement> tableAfterFilter = filteredPage.getObjects();
+        assertTrue(tableAfterFilter.size() == 1, "Фильтр не прошел проверку");
 
-        WebElement okFilter = driver.findElement(By.id("goalrt"));
-        okFilter.click();
+        //Заносим параметры отфильтрованной строки в Map
 
-        //Поиск отфильтрованных элементов в таблице
-        //Ищутся заданные фильтры: в столбце "Объект" - "ТП24", в столбце "Уставка" - "ДЗ",
-        //в столбце "Причина" - "значение выше нормы".
-        //Для каждого элемента фильтра (объект, уставка, причина) создан счетчик.
-        //После фильтрации на странице должно быть 9 строк.
-        //Соответственно, у счетчиков объекта, уставки и причины должны быть значения 9.
+        Map<String, String> filteredValues = new HashMap<>();
 
-        List<WebElement> object = driver.findElements(By.cssSelector("tr td[data-name='object']"));
+        filteredValues.put("timestamp", filteredPage.getTimestamp());
+        filteredValues.put("объект", filteredPage.getObject());
+        filteredValues.put("регистратор", filteredPage.getDevice());
+        filteredValues.put("присоединение", filteredPage.getJoining());
+        filteredValues.put("уставка", filteredPage.getParametr());
+        filteredValues.put("причина", filteredPage.getCause());
+        filteredValues.put("длительность", filteredPage.getDuration());
+        filteredValues.put("имя файла", filteredPage.getName());
 
-        int objectCounter = 0;
+        //Разлогиниваемся
 
-        for (int i = 0; i < object.size(); i++){
-            WebElement element1 = object.get(i);
-            if (!element1.getAttribute("textContent").equals("ТП24")){
-                break;
-            }
-            else {
-                objectCounter++;
-            }
+        LoginTransvision exit = filteredPage.exit();
 
-        }
+        //Логинимся заново
 
-        List<WebElement> parametr = driver.findElements(By.cssSelector("tr td[data-name='parametr']"));
+        authorization.setLogin("user1");
+        authorization.setPassword("123");
+        //Клик по кнопке "Ок" на странице авторизации, переход на страницу пользователя (переопределение объекта страницы пользователя)
+        userPage = authorization.okBtnClick();
 
-        int parametrCounter = 0;
+        //Проверяем сохранился ли фильтр по количеству строк таблицы
 
-        for (int i = 0; i < parametr.size(); i++){
-            WebElement element1 = parametr.get(i);
-            if (!element1.getAttribute("textContent").equals("ДЗ")){
-                break;
-            }
-            else {
-                parametrCounter++;
-            }
+        List<WebElement> tableAfterLogin = userPage.getObjects();
+        assertTrue(tableAfterLogin.size() == 1, "Фильтр не прошел проверку");
 
-        }
+        //Заносим параметры строки в новую Map
 
-        List<WebElement> cause = driver.findElements(By.cssSelector("tr td[data-name='cause']"));
+        Map<String, String> afterLoginValues = new HashMap<>();
 
-        int causeCounter = 0;
+        afterLoginValues.put("timestamp", filteredPage.getTimestamp());
+        afterLoginValues.put("объект", filteredPage.getObject());
+        afterLoginValues.put("регистратор", filteredPage.getDevice());
+        afterLoginValues.put("присоединение", filteredPage.getJoining());
+        afterLoginValues.put("уставка", filteredPage.getParametr());
+        afterLoginValues.put("причина", filteredPage.getCause());
+        afterLoginValues.put("длительность", filteredPage.getDuration());
+        afterLoginValues.put("имя файла", filteredPage.getName());
 
-        for (int i = 0; i < cause.size(); i++){
-            WebElement element1 = cause.get(i);
-            if (!element1.getAttribute("textContent").equals("значение выше нормы")){
-                break;
-            }
-            else {
-                causeCounter++;
-            }
+        //Проверяем, что до разлогинивания и после строка не изменилась
 
-        }
-
-        //Если какой-либо счетчик не равен 9, то выводится сообщение Test failed
-
-        if (objectCounter != 9 || parametrCounter != 9 || causeCounter != 9){
-            System.out.println("Test failed");
-        }
-
-        //Сброс счетчиков
-
-        objectCounter = 0;
-        parametrCounter = 0;
-        causeCounter = 0;
-
-        //Выход из аккаунта
-
-        driver.findElement(By.cssSelector("#outpunkt")).click();
-
-        //Переопределение элементов на странице авторизации и вход
-
-        login = driver.findElement(By.name("transLog"));
-        login.sendKeys("user");
-
-        password = driver.findElement(By.name("transPwd"));
-        password.sendKeys("123");
-
-        okBtn = driver.findElement(By.id("authOk"));
-        okBtn.click();
-
-        //После входа фильтр должен сохраниться. Проверяем значения отфильтрованной таблицы
-
-        object = driver.findElements(By.cssSelector("tr td[data-name='object']"));
-
-
-        for (int i = 0; i < object.size(); i++){
-            WebElement element1 = object.get(i);
-            if (!element1.getAttribute("textContent").equals("ТП24")){
-                break;
-            }
-            else {
-                objectCounter++;
-            }
-
-        }
-
-        parametr = driver.findElements(By.cssSelector("tr td[data-name='parametr']"));
-
-
-        for (int i = 0; i < parametr.size(); i++){
-            WebElement element1 = parametr.get(i);
-            if (!element1.getAttribute("textContent").equals("ДЗ")){
-                break;
-            }
-            else {
-                parametrCounter++;
-            }
-
-        }
-
-        cause = driver.findElements(By.cssSelector("tr td[data-name='cause']"));
-
-
-        for (int i = 0; i < cause.size(); i++){
-            WebElement element1 = cause.get(i);
-            if (!element1.getAttribute("textContent").equals("значение выше нормы")){
-                break;
-            }
-            else {
-                causeCounter++;
-            }
-
-        }
-
-
-        //Проверяем значения счетчиков. Если все счетчики равны 9, то тест прошел.
-        //Если хоть один не равен, то тест провален.
-
-        if (objectCounter == 9 && parametrCounter == 9 && causeCounter == 9){
-            System.out.println("Test passed!");
-        }
-        else {
-            System.out.println("Test failed");
-        }
+        assertTrue(filteredValues.get("timestamp").equals(afterLoginValues.get("timestamp")), "Не совпадает поле Timestamp");
+        assertTrue(filteredValues.get("объект").equals(afterLoginValues.get("объект")), "Не совпадает поле Объект");
+        assertTrue(filteredValues.get("регистратор").equals(afterLoginValues.get("регистратор")), "Не совпадает поле Регистратор");
+        assertTrue(filteredValues.get("присоединение").equals(afterLoginValues.get("присоединение")), "Не совпадает поле Присоединение");
+        assertTrue(filteredValues.get("уставка").equals(afterLoginValues.get("уставка")), "Не совпадает поле Уставка");
+        assertTrue(filteredValues.get("причина").equals(afterLoginValues.get("причина")), "Не совпадает поле Причина");
+        assertTrue(filteredValues.get("длительность").equals(afterLoginValues.get("длительность")), "Не совпадает поле Длительность");
+        assertTrue(filteredValues.get("имя файла").equals(afterLoginValues.get("имя файла")), "Не совпадает поле Имя файла");
 
         driver.close();
     }
